@@ -1,0 +1,47 @@
+You broke the UI by accidentally reusing the “Types” pills data/component in places it doesn’t belong, and you’re also rendering lists twice (or more) because a map is happening in a parent and inside a child.
+
+Paste this to the agent (verbatim):
+
+⸻
+
+TASK: Fix duplicated pills + restore Pokémon nav + stop list duplication (NO redesign).
+
+Symptoms (current):
+	•	/pokemon page: “Generations” + “Legendaries” are gone and replaced by repeated “Types” pills.
+	•	/pokemon/types: shows duplicates (2x each type). Previously was 6x; now 2x.
+	•	Clicking a “Type” should go to /pokemon/type/:typeCode and show that type’s stickers, but the list UI is wrong.
+
+Hard requirements:
+	1.	/pokemon page MUST show the correct top nav pills: Types, Generations, Legendaries (and whatever the 4th pill was if it existed). NO duplicates.
+	2.	/pokemon/types MUST show exactly 18 unique types (one tile per type) + correct sticker counts. NO duplicates.
+	3.	Do not change styling/layout beyond removing duplicates.
+	4.	Do not touch auth/resend. This is a rendering + data wiring bug.
+
+Debug steps you must do:
+	•	Find where the pills are defined for /pokemon and /pokemon/types. Search for: Types, Pokemon Types, pills, navigation, tabs, Poke, type.
+	•	Identify if the same component is being reused on both pages incorrectly (e.g., a PokemonNav or CategoryPills).
+	•	Check for accidental double rendering:
+	•	React StrictMode double-invoking in dev (should NOT duplicate actual DOM if code is correct, but can reveal side effects).
+	•	Nested .map() that renders the pills inside each tile.
+	•	Rendering the same list in both a parent + child.
+	•	Missing/incorrect key props causing weird reuse.
+
+Concrete fixes to implement:
+	•	Ensure pills are rendered once per page, outside any grid .map().
+	•	Ensure the types array is deduped by stable key before rendering:
+	•	const uniqueTypes = Array.from(new Map(types.map(t => [t.code, t])).values());
+	•	Ensure each rendered element uses key={type.code} (or stable id), not index.
+	•	Ensure /pokemon uses its own nav pill list (Types/Generations/Legendaries), not the types list.
+	•	Ensure route links are correct:
+	•	Types list item → /pokemon/type/${type.code}
+	•	Generations → /pokemon/generations
+	•	Legendaries → /pokemon/legendaries
+	•	After fix, verify:
+	•	/pokemon pills show correctly with NO repeats.
+	•	/pokemon/types shows 18 types, each once.
+	•	Clicking “Grass” goes to /pokemon/type/grass and renders.
+
+Report back with:
+	•	The file(s) you changed (paths)
+	•	The exact reason duplicates happened (e.g., pills rendered inside map / component reused)
+	•	Screenshot or note confirming 18 unique types and correct nav pills

@@ -1,0 +1,65 @@
+// convex/schema.ts
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  categories: defineTable({
+    code: v.string(),          // e.g. "ANI"
+    name: v.string(),          // "Animals"
+    sortOrder: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_code", ["code"])
+    .index("by_active_sort", ["isActive", "sortOrder"]),
+
+  subcategories: defineTable({
+    code: v.string(),          // e.g. "ANI-BUTTERFLIES" or whatever your code convention is
+    categoryCode: v.string(),  // "ANI"
+    name: v.string(),          // "Butterflies"
+    sortOrder: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_code", ["code"])
+    .index("by_category_sort", ["categoryCode", "sortOrder"]),
+
+  groups: defineTable({
+    code: v.string(),            // Tier-3 refinement bucket code
+    categoryCode: v.string(),
+    subcategoryCode: v.string(),
+    name: v.string(),
+    sortOrder: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_code", ["code"])
+    .index("by_subcategory_sort", ["subcategoryCode", "sortOrder"]),
+
+  prefixRules: defineTable({
+    prefix: v.string(),          // e.g. "ANI"
+    categoryCode: v.string(),
+    subcategoryCode: v.string(), // NEVER null (your rule)
+    groupCode: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_prefix", ["prefix"])
+    .index("by_active", ["isActive"]),
+
+  stickers: defineTable({
+    code: v.string(),            // e.g. "ANI00001"
+    filename: v.string(),        // "ANI00001.png"
+    title: v.string(),
+    categoryCode: v.string(),
+    subcategoryCode: v.string(),
+    groupCode: v.optional(v.string()),
+    sortOrder: v.number(),
+    isActive: v.boolean(),
+    storageId: v.optional(v.string()), // Convex file storage id (or external key later)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_code", ["code"])
+    .index("by_cat_sub_sort", ["categoryCode", "subcategoryCode", "sortOrder"])
+    .index("by_active_cat", ["isActive", "categoryCode"]),
+});

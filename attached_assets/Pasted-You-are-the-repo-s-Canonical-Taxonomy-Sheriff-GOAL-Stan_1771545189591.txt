@@ -1,0 +1,84 @@
+You are the repo’s “Canonical Taxonomy Sheriff”.
+
+GOAL
+Standardize taxonomy codes across the board (categories, subcategories, groups, routes, and queries) so:
+- One canonical code format exists
+- Seed is idempotent (re-run = same row counts)
+- Cleanup deletes anything non-canonical
+- Frontend and backend use the exact same codes
+- No more “seed != frontend” mismatches
+
+CANONICAL CODE SPEC (HARD RULES)
+1) All taxonomy codes are UPPERCASE.
+2) Delimiter is HYPHEN only. NO underscores in taxonomy codes.
+3) Allowed chars: A–Z, 0–9, and hyphen.
+4) No leading/trailing hyphens. No double hyphens.
+5) Categories may use hyphens too (e.g., HELLO-KITTY, FOOD-DRINK, ANIMATED-SERIES). Never underscores.
+6) Identity rules:
+   - categories unique by: code
+   - subcategories unique by: (categoryCode, code)
+   - groups unique by: (subcategoryCode, code)
+
+IMPLEMENTATION TASKS
+A) Create a single normalizeTaxonomyCode(input: string): string helper used everywhere (seed, cleanup, any insert/upsert).
+   - Converts underscores/spaces to hyphens
+   - Uppercases
+   - Collapses multiple hyphens
+   - Trims hyphens
+   - Throws if output violates rules
+
+B) Convex Schema / Indexes
+- Ensure composite indexes exist:
+  - subcategories: by_category_code (categoryCode, code)
+  - groups: by_subcategory_code (subcategoryCode, code)
+- Remove/stop relying on single-field “by_code” where it creates ambiguity.
+
+C) Seed Standard (IDEMPOTENT)
+- Seed must upsert by canonical identity only:
+  - category by code
+  - subcategory by (categoryCode, code)
+  - group by (subcategoryCode, code)
+- Re-running seed must not increase row counts.
+- Seed should normalize codes before upserting.
+
+D) Cleanup Standard (STRICT)
+- Cleanup defines a canonical allowlist (canonical codes only).
+- Anything not in allowlist is deleted.
+- Include a migration map ONLY for legacy-to-canonical transforms (e.g., ULTRA_BEAST -> ULTRA-BEAST), then remove once data is clean.
+- Print a summary: deleted, remaining, migrated links, mismatches.
+
+E) Frontend Standard (NO HARDCODED ARRAYS)
+- Remove any hardcoded category/subcategory/group arrays (especially “canonical categories” lists).
+- Frontend must fetch categories/subcategories/groups from Convex.
+- Routes must use canonical codes.
+- Any code comparisons must compare canonical codes only.
+
+POKÉMON (MUST MATCH)
+Subcategories under POKEMON:
+- POK-TYP
+- POK-GEN
+- POK-LGD
+
+Groups:
+- Under POK-GEN: GEN-01 … GEN-09 (9 groups)
+- Under POK-LGD: LEGENDARY, MYTHICAL, ULTRA-BEAST (3 groups)
+
+CRITICAL DEBUG (WHY “NO ITEMS FOUND”)
+Add a debug query/mutation that prints counts:
+- number of stickers for each Pokémon group:
+  - For subcategoryCode=POK-GEN and groupCode=GEN-01..GEN-09
+  - For subcategoryCode=POK-LGD and groupCode in LEGENDARY|MYTHICAL|ULTRA-BEAST
+If counts are 0, the UI is correct — we need to seed or map stickers to those groups.
+If counts > 0 and UI shows none, fix the frontend query filter to use the correct (subcategoryCode, groupCode) fields and canonical codes.
+
+DELIVERABLES
+1) normalizeTaxonomyCode helper + used everywhere
+2) Updated schema indexes + upsert logic using composite identity
+3) Updated seed + cleanup with canonical allowlist + minimal migration map
+4) Frontend fully backend-driven for taxonomy (no arrays)
+5) A single “taxonomy audit” command that outputs:
+   - duplicates created: 0
+   - non-canonical rows created: 0
+   - underscore taxonomy codes remaining: 0
+   - counts per category/subcategory/group
+   - Pokémon group counts

@@ -1,0 +1,62 @@
+
+Goal: Pokémon Tier-2 “Types” page is an index/preview page. It renders 18 type boxes and (optionally) shows preview stickers per type. Clicking a type navigates to the type detail page which shows the full sticker list for that type.
+
+Data mapping
+	•	Category code: POKEM
+	•	Tier-2 Types page is driven by Tier-3 subcategories:
+	•	query: subcategories where category_code='POKEM' and code like 'POK-TYP-%'
+	•	A sticker “belongs” to a type if:
+	•	stickers.category_code='POKEM' AND stickers.subcategory_code = <typeSubcategoryCode>
+
+Implement in TSX
+
+1) Fetch type subcategories for Types page
+
+const { data: typeSubs, error } = await supabase
+  .from('subcategories')
+  .select('code,name')
+  .eq('category_code','POKEM')
+  .like('code','POK-TYP-%')
+  .order('code');
+
+2) For each type box, fetch preview stickers (LIMIT N)
+	•	Recommended: batch fetch instead of 18 separate queries.
+	•	Fetch all stickers for POKEM that match type codes, then group in JS.
+
+const typeCodes = (typeSubs ?? []).map(s => s.code);
+const { data: stickers, error: sErr } = await supabase
+  .from('stickers')
+  .select('id,name,subcategory_code,public_url,storage_path,created_at')
+  .eq('category_code','POKEM')
+  .in('subcategory_code', typeCodes)
+  .order('created_at', { ascending: false })
+  .limit(200); // big enough for previews
+
+const previewByType = new Map<string, any[]>();
+for (const code of typeCodes) previewByType.set(code, []);
+for (const st of stickers ?? []) {
+  const arr = previewByType.get(st.subcategory_code);
+  if (arr && arr.length < 8) arr.push(st);
+}
+
+3) Render
+	•	For each typeSubs[i], render a box labeled name (Electric, Bug, etc.)
+	•	Inside the box:
+	•	if preview list empty → “No stickers yet”
+	•	else render up to 8 thumbnails
+
+4) Click behavior
+	•	Clicking a type box navigates to /pokemon/type/<slug>
+	•	Pass the actual subcategory_code (e.g. POK-TYP-ELC) via route state or lookup table.
+
+5) Type detail page query
+
+const { data, error } = await supabase
+  .from('stickers')
+  .select('*')
+  .eq('category_code','POKEM')
+  .eq('subcategory_code', selectedTypeCode)
+  .order('created_at', { ascending: false });
+Acceptance test
+	•	/pokemon/types shows 18 boxes always (even empty).
+	•	After uploading POKE00001.png into POK-TYP-ELC, Electric box shows it in preview AND the Electric detail page shows it in full list.

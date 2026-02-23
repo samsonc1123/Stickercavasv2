@@ -1,0 +1,85 @@
+You are the senior systems architect for this Convex + React sticker taxonomy app.
+
+Goal: STANDARDIZE all taxonomy codes across the entire system (seed, cleanup, schema, query layer, frontend routes/components) AND fix the Pokemon pages showing “No items found” even though counts should be 9 generations and 3 legendaries.
+
+NON-NEGOTIABLE CANONICAL STANDARD (apply everywhere):
+1) Category.code: UPPERCASE, hyphen-delimited only. Example: FOOD-DRINK, ANIMATED-SERIES, HELLO-KITTY. (No underscores.)
+2) Subcategory.code: UPPERCASE, hyphen-delimited, prefixed by a short category prefix + “-” + token. Example: POK-TYP, POK-GEN, POK-LGD, HK-MAIN, FLO-ROS, FSH-BAP. (Do NOT strip these prefixes.)
+3) Group.code: UPPERCASE, hyphen-delimited. Example: ULTRA-BEAST (NOT ULTRA_BEAST). GEN-01..GEN-09. (No underscores.)
+4) No leading/trailing hyphens. No double hyphens. No mixed formats.
+5) Identity/uniqueness MUST be composite:
+   - subcategories unique by (categoryCode, code)
+   - groups unique by (subcategoryCode, code)
+   - never dedupe by name anywhere (server or client)
+
+MIGRATION REQUIREMENTS:
+A) Build ONE global migration map that converts ALL legacy formats → canonical:
+   - underscores → hyphens (HK_MAIN → HK-MAIN, ULTRA_BEAST → ULTRA-BEAST, FOOD_DRINK → FOOD-DRINK, etc.)
+   - any prior “stripped prefix” mistakes must be reversed (ROS must become FLO-ROS, BAP must become FSH-BAP, etc.) IF those were previously used by the frontend.
+B) Apply migration safely:
+   - Update references in dependent docs (stickers / stickerGroupLinks / whatever relationship table exists) BEFORE deleting old codes.
+   - After migration, delete any non-canonical leftovers not in the canonical set.
+
+IMPLEMENTATION TASKS (do in this order):
+1) Inventory & truth:
+   - Print the current canonical sets for categories, subcategories, groups from seed.ts (the intended truth).
+   - Query Convex to list the actual DB rows for:
+     - categories
+     - subcategories
+     - groups
+     - AND the table/collection that links stickers to groups (or stickers’ groupCode field), whatever exists.
+   - Report diffs: missing, extra, mismatched codes.
+
+2) Enforce schema uniqueness:
+   - Ensure schema indexes exist:
+     - categories: by_code (code)
+     - subcategories: by_category_code (categoryCode, code)
+     - groups: by_subcategory_code (subcategoryCode, code)
+
+3) Standardize seed:
+   - Seed must be idempotent (rerun = 0 new rows).
+   - Seed must write only canonical codes (hyphen-delimited).
+   - Seed must not “invent” short codes that differ from frontend/route expectations.
+   - For Pokémon specifically ensure:
+     - subcategories: POK-TYP, POK-GEN, POK-LGD exist
+     - groups under POK-GEN: GEN-01..GEN-09 (9)
+     - groups under POK-LGD: LEGENDARY, MYTHICAL, ULTRA-BEAST (3)
+     - groups under POK-TYP: the 18 types (18)
+
+4) Standardize cleanup.ts:
+   - Cleanup must:
+     - migrate legacy → canonical using the global map
+     - enforce canonical set membership
+     - update ALL references (especially sticker↔group links) so pages don’t go empty
+     - then delete legacy
+
+5) Fix the “No items found” bug (Pokemon pages):
+   - Determine what the UI is actually rendering:
+     - Does /pokemon/generations page render GROUPS under subcategoryCode POK-GEN?
+     - Does it require sticker counts per group?
+   - Run the exact backend query used by those pages and log:
+     - returned group list
+     - returned sticker counts per group
+   - If groups exist but page is empty:
+     - the query is filtering by wrong code format (underscore vs hyphen) OR wrong subcategoryCode OR using name-based dedupe OR joining on the wrong field.
+     - fix query layer + frontend to use code and canonical codes only.
+   - If groups exist but sticker counts are zero:
+     - the sticker↔group linking data is missing or still pointing at legacy codes.
+     - migrate sticker links to canonical group codes (e.g., ULTRA_BEAST → ULTRA-BEAST)
+     - verify at least one sticker is associated to each group (or adjust UI to show empty groups but not hide them).
+
+VERIFICATION (must be shown in output):
+- Rerun seed 3x: counts do not change.
+- Run cleanup: second run deletes 0 and migrates 0.
+- Pokémon pages:
+  - /pokemon/generations shows 9 items (GEN-01..GEN-09)
+  - /pokemon/legendaries shows 3 items (LEGENDARY, MYTHICAL, ULTRA-BEAST)
+- Project-wide grep confirms:
+  - no underscore-based taxonomy codes remain in app code (except any intentional migration-map keys)
+  - all taxonomy handling dedupes by code, not name.
+
+Deliverable:
+- A short “What changed” summary
+- The exact lists/counts for Pokémon after fix
+- The specific file(s) touched
+- The key Convex queries/mutations run to confirm.

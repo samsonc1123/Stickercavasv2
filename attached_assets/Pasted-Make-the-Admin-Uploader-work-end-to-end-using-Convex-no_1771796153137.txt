@@ -1,0 +1,64 @@
+Make the Admin Uploader work end-to-end using Convex (no Supabase). Do all file edits yourself and show raw output for each command you run.
+
+GOAL:
+Admin Uploader uploads an image and creates a sticker row in Convex with a storageId. Then the UI lists the new sticker.
+
+STEPS (DO IN ORDER):
+	1.	Locate the Admin Uploader code:
+
+	•	Search repo for the uploader entry UI and logic:
+	•	grep -Rni “admin.*upload|uploader|Upload|upload” client/src convex | head -n 200
+	•	Identify the main uploader component/page file path.
+
+	2.	Remove any Supabase remnants in uploader flow:
+
+	•	If uploader imports supabase client, storage bucket code, or env vars, replace with Convex calls.
+
+	3.	Implement Convex upload flow (canonical):
+A) Create/ensure these Convex functions exist:
+
+	•	convex/uploads.ts (or similar):
+	•	export const generateUploadUrl = action({ args: {}, handler: async (ctx) => await ctx.storage.generateUploadUrl() })
+	•	convex/stickers.ts (or similar):
+	•	export const finalizeStickerUpload = mutation({
+args: {
+storageId: v.string(),
+name: v.string(),
+categoryCode: v.optional(v.string()),
+subcategoryCode: v.optional(v.string()),
+// include any fields the UI needs
+},
+handler: async (ctx, args) => {
+// insert row into stickers table with storageId + metadata
+// return inserted id
+}
+})
+
+B) Update Convex schema if needed:
+	•	Add stickers table fields needed for uploader + listing.
+	•	Add indexes if required.
+
+	4.	Update frontend uploader:
+
+	•	Call generateUploadUrl (Convex) to get a URL
+	•	PUT the file to that URL (fetch)
+	•	Receive storageId from the upload response
+	•	Call finalizeStickerUpload with storageId + metadata
+	•	Refresh list / navigate / show success
+
+	5.	Provide a “smoke test” checklist:
+
+	•	Start app
+	•	Upload one PNG
+	•	Confirm sticker appears in admin list
+	•	Confirm sticker renders when listing reads from Convex
+
+COMMANDS:
+	•	Run npm test only if configured.
+	•	Always run npx convex dev (or deploy if repo is pinned to prod) and show raw output.
+	•	Show raw errors if any; fix them.
+
+OUTPUT:
+	•	List files changed
+	•	Paste final function signatures for generateUploadUrl and finalizeStickerUpload
+	•	Confirm Admin Uploader works end-to-end.

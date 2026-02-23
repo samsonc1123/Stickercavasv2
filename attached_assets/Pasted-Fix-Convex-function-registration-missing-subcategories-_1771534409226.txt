@@ -1,0 +1,51 @@
+Fix Convex function registration + missing subcategories API.
+
+Symptoms:
+	•	Vite overlay: “Could not find public function for ‘getSubcategoriesByCategory:…’”
+	•	convex/subcategories.ts is EMPTY (no exports)
+	•	npx convex run seed:seedTestGrassSticker fails: function not found
+
+Goals:
+	1.	Implement and export the missing Convex query getSubcategoriesByCategory so the frontend route /pokemon can load subcategories.
+	2.	Restore/implement seed:seedTestGrassSticker so I can seed one Grass sticker and it appears in both:
+	•	/pokemon/type/grass
+	•	/pokemon/types tile counts
+
+Constraints:
+	•	Do NOT change frontend UI beyond what’s needed to point at the correct Convex function name/module.
+	•	Do NOT refactor unrelated code.
+
+Steps to do:
+A) Create/replace convex/subcategories.ts with a valid Convex query:
+	•	export const getSubcategoriesByCategory = query({ ... })
+	•	args: { categoryCode: v.string(), onlyActive: v.optional(v.boolean()) }
+	•	query ctx.db.query("subcategories") and filter by categoryCode
+	•	if onlyActive then filter isActive === true (if field exists; otherwise don’t filter and note it)
+	•	sort by sortOrder if present; otherwise stable sort by code
+
+B) Ensure the function is actually registered in the generated API:
+	•	Confirm convex/_generated/api.d.ts includes subcategories.getSubcategoriesByCategory
+	•	If not, run Convex dev sync (see “Run instructions” below)
+
+C) Restore/implement seed function:
+	•	Put it in convex/seed.ts (or convex/seeds.ts), exported as:
+	•	export const seedTestGrassSticker = mutation({ ... })
+	•	It must insert:
+	•	one sticker doc in stickers with code like POK-TEST-0001, name “Bulbasaur Test”
+	•	link it to the grass group in stickerGroupLinks using groupCode POK-TYP-GRASS
+	•	Use required fields per schema (filename, sortOrder, etc). If schema differs, adapt accordingly.
+
+D) Run instructions (important):
+	•	Convex functions only appear when npx convex dev (or deploy) has successfully pushed.
+	•	Keep npx convex dev running in ONE shell tab continuously.
+	•	In a SECOND shell tab, run:
+	•	npx convex run seed:seedPokemonBase
+	•	npx convex run seed:seedTestGrassSticker
+
+E) Report back with:
+	•	Exact file(s) changed and their contents summary
+	•	Confirmation that the Vite overlay is gone
+	•	Screenshot or log line showing _generated/api.d.ts includes:
+	•	subcategories.getSubcategoriesByCategory
+	•	seed.seedTestGrassSticker
+	•	stickers.getStickerCountsByGroupCodes

@@ -1,0 +1,74 @@
+Roger marching orders (no freelancing)
+
+0) Non-negotiables (pin these in code comments)
+	•	Supabase tables are source of truth for categories/subcategories/prefix rules.
+	•	Catalog Sync / “Sync to Storage” must NEVER create/rename categories/subcategories. Only create sticker rows from storage using existing prefix rules.
+	•	Uploads hard-fail if prefix rule doesn’t exist.
+	•	Stop querying subcategories by parent_code. Correct is: subcategories WHERE category_code = <CATEGORY_CODE>.
+
+⸻
+
+Phase 1 — Fix the dropdowns (this is blocking everything)
+
+1) Categories dropdown
+	•	Ensure categories dropdown is populated from public.categories (code + name).
+	•	No hardcoded arrays.
+
+2) Subcategories dropdown
+	•	When a category is selected:
+	•	fetch subcategories with:
+	•	select code, name from public.subcategories where category_code = selectedCategoryCode order by name
+	•	No hardcoded arrays.
+	•	Fix every place in UI where it still uses parent_code logic.
+
+Acceptance test: pick category ANI → see the 13 subcats you confirmed exist in DB.
+
+⸻
+
+Phase 2 — Prefix Rules Mapper must reflect DB reality
+
+3) Prefix Rules Mapper data source
+	•	Prefix Rules Mapper must read from public.sticker_prefix_rules only.
+	•	Mapper must display:
+	•	category_code, subcategory_code, prefix
+	•	(bonus) join to categories/subcategories names for readability
+
+4) Create/update rules
+	•	If you edit/create a rule, it writes ONLY to sticker_prefix_rules.
+	•	Any UI “total prefix rules” count must be counting DB rows, not cached state.
+
+Acceptance test: Mapper shows the same count as select count(*) from sticker_prefix_rules;
+
+⸻
+
+Phase 3 — “Sync to Storage” button logic (the dangerous one)
+
+5) Strict behavior (no guessing)
+
+When Sync runs:
+	1.	List objects in storage bucket folder(s) you’re syncing.
+	2.	For each object, determine prefix from filename (using your locked convention).
+	3.	Lookup prefix in sticker_prefix_rules.
+	•	If no match → log + skip (or hard-fail if you want strict mode; but do NOT invent categories)
+	4.	Create sticker row in public.stickers with:
+	•	name, storage_path, category_code, subcategory_code, etc.
+	5.	Never touch categories/subcategories tables.
+
+Acceptance test: Add a known file with known prefix → creates sticker row with non-null category_code/subcategory_code. Add unknown prefix → does not create row.
+
+⸻
+
+Phase 4 — Load more categories/subcategories (DB-only, correct order)
+
+6) Insert order rule (to avoid FK 23503)
+	1.	Insert into categories
+	2.	Insert into subcategories with category_code
+	3.	Insert into sticker_prefix_rules referencing valid codes
+
+Acceptance test: no FK errors; dropdowns show new items immediately.
+
+⸻
+
+One sentence summary to paste to Roger
+
+“Fix dropdowns to be 100% Supabase-driven (subcats by category_code, no parent_code, no hardcoded arrays), make Prefix Rules Mapper read/write only sticker_prefix_rules, and make Sync-to-Storage only create sticker rows by matching filename prefixes to existing prefix rules—never create/rename categories/subcategories.”

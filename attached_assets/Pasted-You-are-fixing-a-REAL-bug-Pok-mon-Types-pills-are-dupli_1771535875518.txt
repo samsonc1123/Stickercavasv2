@@ -1,0 +1,47 @@
+You are fixing a REAL bug: Pokémon Types pills are duplicated (e.g., FIRE appears twice). Your last report said it renders 18 unique types, but the UI still shows duplicates. Fix it for real.
+
+Goal:
+- Pokémon main nav pills = exactly: Types, Generations, Legendaries (once each)
+- Pokémon Types page pills = exactly 18 unique types, no duplicates
+- Clicking a type should go to that type page
+- Fix the root cause (data), not just a UI band-aid
+
+Rules:
+- Do NOT add new features.
+- Do NOT change styling.
+- Keep changes minimal and targeted.
+- Report exactly what you changed and why, with file paths.
+
+Step 1 — Confirm whether Convex data is duplicated (REQUIRED):
+- Inspect the Convex `groups` table for duplicates that represent the same Pokémon type.
+- Specifically check if multiple rows exist with the same `code` OR same display name (case/whitespace differences).
+- Print out a debug list in a one-off query/mutation or via Convex dashboard logs: codes + names + count.
+
+Step 2 — Fix the root cause in data (REQUIRED if duplicates exist):
+- Make seeding idempotent:
+  - Update `seedPokemonBase` (and any other seed) so it UPSERTS by type code (or a stable normalized key) instead of inserting duplicates.
+- Add a one-time cleanup mutation:
+  - Delete duplicate `groups` rows for Pokémon types, keeping exactly one per type.
+  - Choose the canonical row deterministically (e.g., earliest _creationTime).
+  - Ensure related links (e.g., stickerGroupLinks) still point to the kept group (repoint before delete if needed).
+
+Step 3 — Make the query return stable unique results (defense-in-depth):
+- In `convex/groups.ts` (getGroupsBySubcategory), enforce uniqueness in the returned array.
+- Dedup by a stable normalized key (prefer `code`, else normalize `name` with trim + uppercase).
+- Sort results in canonical Pokémon type order if that order exists in code; otherwise stable alphabetical.
+
+Step 4 — Fix the UI only if still needed after data is clean:
+- In `client/src/pages/PokemonTypesPage.tsx`, ensure pills are rendered from a single source (not mapped twice).
+- Ensure the list is deduped by the SAME normalized key used server-side.
+- Ensure React keys are stable and unique.
+
+Verification checklist (MUST DO):
+1) Restart dev server if needed, refresh the page.
+2) Pokémon Types pills show exactly 18 unique types.
+3) No duplicate FIRE/WATER/etc.
+4) Main Pokémon page nav pills show exactly once each (Types/Generations/Legendaries).
+
+Deliverables:
+- List of duplicates found (counts + examples).
+- Files changed + short diff summary.
+- Confirmation screenshots are not required, but the counts MUST match.

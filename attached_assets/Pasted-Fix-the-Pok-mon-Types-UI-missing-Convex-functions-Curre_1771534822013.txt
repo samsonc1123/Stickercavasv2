@@ -1,0 +1,28 @@
+Fix the Pokémon Types UI + missing Convex functions. Current bugs:
+
+Bug A (UI): /pokemon/types shows duplicates (ex: FIRE repeated ~6x, ICE repeated, etc.). Each of the 18 types must render exactly once in BOTH:
+	1.	the horizontal “type pill” nav
+	2.	the 18-type grid/list
+
+Bug B (Convex): Runtime overlay shows missing public function getSubcategoriesByCategory:*. In the repo, convex/subcategories.ts exists but is empty (only boilerplate). Implement and export the required query function(s) so the client stops erroring.
+
+Bug C (seed function mismatch): CLI shows available: seed:seedPokemonBase but running seed:seedTestGrassSticker fails (function not found). Either (1) add/register that seed function properly under convex/seed.ts (or wherever seeds live) OR (2) remove/update any docs/UI that reference it. Keep the working seed(s) consistent.
+
+Constraints:
+	•	Do NOT refactor unrelated files.
+	•	Do NOT change styling unless required to stop duplication.
+	•	Keep function names aligned with what the frontend calls (check imports from convex/_generated/api usage).
+	•	Ensure types are deduped at the source: either DB query returns unique, or frontend does unique by code once (prefer backend uniqueness if the data can duplicate).
+
+What to do:
+	1.	Inspect /pokemon/types page/component and find why the type list is being rendered multiple times (likely nested loops, chunking bug, repeated array concat, or bad key usage). Fix so it renders each type once.
+	2.	Implement convex/subcategories.ts with getSubcategoriesByCategory (and any other function the client calls) and ensure it appears in convex/_generated/api.d.ts after npx convex dev.
+	3.	Verify by running npx convex dev (keep it running) and reloading preview. Confirm:
+	•	No runtime overlay errors.
+	•	Exactly 18 type pills and 18 type tiles.
+	•	“Grass” shows the seeded sticker count once (not duplicated).
+
+Report back with:
+	•	The exact file(s) you changed
+	•	The exact reason duplication was happening
+	•	A screenshot or log confirming 18 unique types + no overlay errors

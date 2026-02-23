@@ -1,0 +1,17 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+dist/
+build/
+.cache/
+.next/
+*.zip
+*.tar.gz
+*.tgz
+backup*
+debug*
+generated-icon*
+.DS_Store
+.replit
+
+.env.local

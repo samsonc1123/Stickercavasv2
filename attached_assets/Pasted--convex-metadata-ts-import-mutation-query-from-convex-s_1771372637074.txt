@@ -1,0 +1,136 @@
+// convex/metadata.ts
+import { mutation, query } from "convex/server";
+import { v } from "convex/values";
+
+// Helper: build codes like CLR00001
+function formatCode(prefix: string, n: number) {
+  return `${prefix}${String(n).padStart(5, "0")}`;
+}
+
+// 1) Ensure a counter exists (or create it)
+export const ensureCounter = mutation({
+  args: { prefix: v.string() },
+  handler: async (ctx, { prefix }) => {
+    const existing = await ctx.db
+      .query("metadataCounters")
+      .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
+      .unique();
+
+    if (existing) return existing._id;
+
+    return await ctx.db.insert("metadataCounters", { prefix, next: 1 });
+  },
+});
+
+// 2) Allocate next code for a prefix (CLR/STY/THM)
+export const allocateMetadataCode = mutation({
+  args: { prefix: v.string() },
+  handler: async (ctx, { prefix }) => {
+    const row = await ctx.db
+      .query("metadataCounters")
+      .withIndex("by_prefix", (q) => q.eq("prefix", prefix))
+      .unique();
+
+    if (!row) throw new Error(`Counter missing for prefix: ${prefix}`);
+
+    const code = formatCode(prefix, row.next);
+
+    await ctx.db.patch(row._id, { next: row.next + 1 });
+
+    return code;
+  },
+});
+
+// 3) Create a metadata term (auto-allocates code)
+export const createMetadataTerm = mutation({
+  args: {
+    prefix: v.string(), // "CLR" | "STY" | "THM" ...
+    kind: v.string(),
+    name: v.string(),
+    categoryCode: v.optional(v.string()),
+    subcategoryCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Allocate code
+    const row = await ctx.db
+      .query("metadataCounters")
+      .withIndex("by_prefix", (q) => q.eq("prefix", args.prefix))
+      .unique();
+
+    if (!row) throw new Error(`Counter missing for prefix: ${args.prefix}`);
+
+    const code = formatCode(args.prefix, row.next);
+
+    await ctx.db.patch(row._id, { next: row.next + 1 });
+
+    // Avoid duplicates by (kind, name) in same scope if you want:
+    const existing = await ctx.db
+      .query("metadataTerms")
+      .withIndex("by_kind_name", (q) => q.eq("kind", args.kind).eq("name", args.name))
+      .collect();
+
+    // (Light check only; remove if you want duplicates allowed)
+    if (existing.length > 0) {
+      return { created: false, code: existing[0].code };
+    }
+
+    await ctx.db.insert("metadataTerms", {
+      code,
+      kind: args.kind,
+      name: args.name,
+      categoryCode: args.categoryCode,
+      subcategoryCode: args.subcategoryCode,
+      createdAt: Date.now(),
+    });
+
+    return { created: true, code };
+  },
+});
+
+// 4) Link a metadata term to a sticker (unique per pair)
+export const linkMetadataToSticker = mutation({
+  args: {
+    stickerCode: v.string(),
+    metadataCode: v.string(),
+  },
+  handler: async (ctx, { stickerCode, metadataCode }) => {
+    const existing = await ctx.db
+      .query("stickerMetadata")
+      .withIndex("by_pair", (q) => q.eq("stickerCode", stickerCode).eq("metadataCode", metadataCode))
+      .unique();
+
+    if (existing) return { linked: false };
+
+    await ctx.db.insert("stickerMetadata", {
+      stickerCode,
+      metadataCode,
+      createdAt: Date.now(),
+    });
+
+    return { linked: true };
+  },
+});
+
+// 5) Read all metadata terms linked to a sticker
+export const getStickerMetadata = query({
+  args: { stickerCode: v.string() },
+  handler: async (ctx, { stickerCode }) => {
+    const links = await ctx.db
+      .query("stickerMetadata")
+      .withIndex("by_sticker", (q) => q.eq("stickerCode", stickerCode))
+      .collect();
+
+    const codes = links.map((l) => l.metadataCode);
+
+    const terms = await Promise.all(
+      codes.map(async (code) => {
+        return await ctx.db
+          .query("metadataTerms")
+          .withIndex("by_code", (q) => q.eq("code", code))
+          .unique();
+      })
+    );
+
+    return terms.filter(Boolean);
+  },
+});
